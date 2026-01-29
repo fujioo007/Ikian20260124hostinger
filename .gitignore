@@ -1,0 +1,21 @@
+# Docker / volumes
+
+db-data1/
+letsencrypt/
+
+# PrestaShop
+
+
+project/public/config/settings.inc.php
+project/public/html/cache/
+
+
+!.env
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+

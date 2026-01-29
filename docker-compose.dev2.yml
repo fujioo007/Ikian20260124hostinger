@@ -1,0 +1,125 @@
+version: "3.9"
+
+services:
+
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.directory=/traefik_dynamic"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080" # dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./certs:/certs:ro
+      - ./traefik_dynamic:/traefik_dynamic:ro
+    networks:
+      - web
+
+  db:
+    image: mariadb:11
+    container_name: prestashop-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: prestashop
+      MYSQL_USER: prestashop
+      MYSQL_PASSWORD: prestashop
+    volumes:
+      - ./db-data1:/var/lib/mysql
+    networks:
+      - web
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+    depends_on:
+      - db
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      # HTTPS router
+      - "traefik.http.routers.phpmyadmin.rule=Host(`phpmyadmin.localhost`)"
+      - "traefik.http.routers.phpmyadmin.entrypoints=websecure"
+      - "traefik.http.routers.phpmyadmin.tls=true"
+      - "traefik.http.services.phpmyadmin.loadbalancer.server.port=80"
+      # HTTP router → redirect
+      - "traefik.http.routers.phpmyadmin-http.rule=Host(`phpmyadmin.localhost`)"
+      - "traefik.http.routers.phpmyadmin-http.entrypoints=web"
+      - "traefik.http.routers.phpmyadmin-http.middlewares=https-redirect"
+      - "traefik.http.middlewares.https-redirect.redirectscheme.scheme=https"
+  redis:
+    image: redis:7-alpine
+    container_name: prestashop-redis
+    restart: unless-stopped
+    networks:
+      - web
+  prestashop-php:
+    build:
+      context: ./prestashop-php
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./project:/var/www
+    environment:
+      TZ: UTC
+      DB_SERVER: db
+      DB_NAME: prestashop
+      DB_USER: prestashop
+      DB_PASSWORD: prestashop
+      PS_DEV_MODE: 1
+    # 🔑 SESSIONS PARTAGÉES VIA REDIS
+      PHP_SESSION_SAVE_HANDLER: redis
+      PHP_SESSION_SAVE_PATH: "tcp://redis:6379"
+    depends_on:
+      - db
+      - redis
+    networks:
+      web:
+        aliases:
+          - prestashop-php
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    volumes:
+      - ./project:/var/www
+      - ./prestashop-php/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - prestashop-php
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      # HTTPS router
+      - "traefik.http.routers.nginx.rule=Host(`prestashop1.localhost`)"
+      - "traefik.http.routers.nginx.entrypoints=websecure"
+      - "traefik.http.routers.nginx.tls=true"
+      - "traefik.http.services.nginx.loadbalancer.server.port=80"
+      # HTTP router → redirect
+      - "traefik.http.routers.nginx-http.rule=Host(`prestashop1.localhost`)"
+      - "traefik.http.routers.nginx-http.entrypoints=web"
+      - "traefik.http.routers.nginx-http.middlewares=https-redirect"
+      - "traefik.http.middlewares.https-redirect.redirectscheme.scheme=https"
+
+networks:
+  web:
+    driver: bridge
+
+volumes:
+  db-data1:
+  certs:
+  traefik_dynamic:
