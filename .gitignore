@@ -3,7 +3,7 @@
 
 
 db-data1/
-letsencrypt/
+!letsencrypt/
 
 # PrestaShop
 
