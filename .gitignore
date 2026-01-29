@@ -1,5 +1,7 @@
 # Docker / volumes
 
+
+
 db-data1/
 letsencrypt/
 
@@ -9,6 +11,9 @@ letsencrypt/
 project/public/config/settings.inc.php
 project/public/html/cache/
 
+
+!project/public/index.php
+!project/public/Install_PrestaShop.html
 
 !.env
 
